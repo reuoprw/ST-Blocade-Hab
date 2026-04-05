@@ -2,27 +2,44 @@ local UIS = game:GetService("UserInputService")
 local TS = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local VIM = game:GetService("VirtualInputManager")
-local VU = game:GetService("VirtualUser")
 local CoolPlr = game.Players.LocalPlayer
 
-local Turn, AttackTurn, EspTurn, AfkTurn, AutoReadyTurn, AutoETurn, AutoChristmas = false, false, false, false, false, false, false
+-- ПЕРЕМЕННЫЕ (ПОЛНЫЙ СПИСОК)
+local Turn, AttackTurn, EspTurn, AfkTurn, AutoReadyTurn, AutoETurn = false, false, false, false, false, false
+local AutoVoteEnabled = false
+local SelectedMode = "Рождество"
 local OpenKey = Enum.KeyCode.LeftAlt
-local ChangingKey, Dropped = false, false
+local ChangingKey, DroppedLang, DroppedMode = false, false, false
 local CurrentLang = "Русский"
 local LobbySpawnPos = nil
 local IsTeleporting = false
 local lastESpam = 0
+local AttackDebounce = false
 
--- КД ДЛЯ ФАРМА (5 СЕКУНД)
+-- ПАРАМЕТРЫ ФАРМА
 local FarmDelay = 5 
 local EnemyDetectedTime = 0
 local WaitingForFarm = false
 
-local Langs = {
-    ["Русский"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Фарм", VisT = "👁️ Визуалы", SettT = "⚙️ Настройки", AFarm = "АВТО ФАРМ", AAtk = "АВТО АТАКА", ESP = "ВКЛЮЧИТЬ ESP", Bind = "КЛАВИША", Lang = "ЯЗЫК", AFK = "АНТИ-АФК", AReady = "АВТО ГОТОВНОСТЬ", AETxt = "АВТО [E]", AXmas = "АВТО РОЖДЕСТВО" },
-    ["English"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Farm", VisT = "👁️ Visuals", SettT = "⚙️ Settings", AFarm = "AUTO FARM", AAtk = "AUTO ATTACK", ESP = "ENABLE ESP", Bind = "KEYBIND", Lang = "LANGUAGE", AFK = "ANTI-AFK", AReady = "AUTO READY", AETxt = "AUTO [E]", AXmas = "AUTO XMAS" }
+-- РЕЖИМЫ (ВСЕ 13)
+local Modes = {
+    "Средний", "Сложный", "Экстримальный", "Безумный", "Кошмар", 
+    "Босс Раш", "В тумане", "Зомби", "Рождество", "Адская волна", 
+    "Темное измерение", "Вторжение", "Очаковок"
 }
 
+local Langs = {
+    ["Русский"] = { Title = "BLOCKADE HUB", FarmT = "🤖 Авто", VisT = "👁️ Визуалы", SettT = "⚙️ Настройки", AFarm = "АВТО ФАРМ", AAtk = "АВТО АТАКА", ESP = "ВКЛЮЧИТЬ ESP", Bind = "КЛАВИША", Lang = "ЯЗЫК", AFK = "АНТИ-АФК", AReady = "АВТО ГОТОВНОСТЬ", AETxt = "АВТО [E]", ModeTxt = "РЕЖИМ", AVoteTxt = "АВТО ГОЛОСОВАНИЕ" },
+    ["English"] = { Title = "BLOCKADE HUB", FarmT = "🤖 Auto", VisT = "👁️ Visuals", SettT = "⚙️ Settings", AFarm = "AUTO FARM", AAtk = "AUTO ATTACK", ESP = "ENABLE ESP", Bind = "KEYBIND", Lang = "LANGUAGE", AFK = "ANTI-AFK", AReady = "AUTO READY", AETxt = "AUTO [E]", ModeTxt = "MODE", AVoteTxt = "AUTO VOTE" }
+}
+
+-- ОТПРАВКА ГОЛОСА
+local function sendVote(modeName)
+    local voteEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Vote")
+    if voteEvent then voteEvent:FireServer(modeName) end
+end
+
+-- ПЕРЕТАСКИВАНИЕ
 local function makeDraggable(frame)
     local dragging, dragInput, dragStart, startPos
     frame.InputBegan:Connect(function(input)
@@ -49,22 +66,19 @@ local function findZone()
     return nil
 end
 
--- 🛡️ НОВЫЙ АНТИ-АФК (ДЛЯ МОБИЛОК И ПК)
+-- АНТИ-АФК (КАМЕРА)
 for _, v in pairs(getconnections(CoolPlr.Idled)) do v:Disable() end
 CoolPlr.Idled:Connect(function()
     if AfkTurn then
         pcall(function()
             local cam = workspace.CurrentCamera
-            local oldCF = cam.CFrame
-            cam.CFrame = oldCF * CFrame.Angles(0, math.rad(0.1), 0)
-            task.wait(0.1)
-            cam.CFrame = oldCF
+            cam.CFrame = cam.CFrame * CFrame.Angles(0, math.rad(0.1), 0)
         end)
     end
 end)
 
-local Gui = Instance.new("ScreenGui", CoolPlr.PlayerGui); Gui.Name = "BlockadeHub_Final"; Gui.ResetOnSpawn = false
-
+-- ГУИ
+local Gui = Instance.new("ScreenGui", CoolPlr.PlayerGui); Gui.Name = "BlockadeHub_Ultra"; Gui.ResetOnSpawn = false
 local OpenBtn = Instance.new("TextButton", Gui)
 OpenBtn.Size = UDim2.new(0, 50, 0, 50); OpenBtn.Position = UDim2.new(0.5, -25, 0.5, -25)
 OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30); OpenBtn.Text = "BH"; OpenBtn.TextColor3 = Color3.new(1, 1, 1); OpenBtn.Font = "GothamBold"; OpenBtn.TextSize = 18
@@ -83,8 +97,8 @@ local function styleSide(btn) btn.Size = UDim2.new(0.9, 0, 0, 38); btn.Backgroun
 styleSide(SideBtnFarm); styleSide(SideBtnVis); styleSide(SideBtnSett)
 
 local Pages = Instance.new("Frame", Main); Pages.Position = UDim2.new(0, 160, 0, 15); Pages.Size = UDim2.new(1, -175, 1, -30); Pages.BackgroundTransparency = 1
-local FarmP = Instance.new("Frame", Pages); local VisP = Instance.new("Frame", Pages); local SettP = Instance.new("Frame", Pages)
-for _, p in pairs({FarmP, VisP, SettP}) do p.Size = UDim2.new(1,0,1,0); p.BackgroundTransparency = 1; p.Visible = false; Instance.new("UIListLayout", p).Padding = UDim.new(0,10) end
+local FarmP = Instance.new("ScrollingFrame", Pages); local VisP = Instance.new("Frame", Pages); local SettP = Instance.new("Frame", Pages)
+for _, p in pairs({FarmP, VisP, SettP}) do p.Size = UDim2.new(1,0,1,0); p.BackgroundTransparency = 1; p.Visible = false; if p:IsA("ScrollingFrame") then p.ScrollBarThickness = 0; p.CanvasSize = UDim2.new(0,0,1.4,0) end; Instance.new("UIListLayout", p).Padding = UDim.new(0,10) end
 FarmP.Visible = true
 
 local function createBtn(p)
@@ -93,34 +107,48 @@ local function createBtn(p)
     return b
 end
 
-local TpB = createBtn(FarmP); local AtkB = createBtn(FarmP); local AutoEB = createBtn(FarmP); local ReadyB = createBtn(FarmP); local XmasB = createBtn(FarmP)
-local EspB = createBtn(VisP); local BinB = createBtn(SettP); local AfkBBtn = createBtn(SettP)
+-- ВКЛАДКА АВТО
+local TpB = createBtn(FarmP); local AtkB = createBtn(FarmP); local AutoEB = createBtn(FarmP); local ReadyB = createBtn(FarmP)
 
-local LangCont = Instance.new("Frame", SettP); LangCont.Size = UDim2.new(1, 0, 0, 50); LangCont.BackgroundTransparency = 1
-local LangLab = Instance.new("TextLabel", LangCont); LangLab.Size = UDim2.new(0.5, 0, 1, 0); LangLab.Position = UDim2.new(0, 10, 0, 0); LangLab.BackgroundTransparency = 1; LangLab.TextColor3 = Color3.new(1, 1, 1); LangLab.Font = "GothamSemibold"
-local DropBtn = Instance.new("TextButton", LangCont); DropBtn.Size = UDim2.new(0.45, 0, 0, 32); DropBtn.Position = UDim2.new(0.55, -5, 0, 9); DropBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); DropBtn.TextColor3 = Color3.new(1, 1, 1); DropBtn.ZIndex = 5; Instance.new("UICorner", DropBtn).CornerRadius = UDim.new(0, 8)
-local DropScroll = Instance.new("Frame", DropBtn); DropScroll.Size = UDim2.new(1, 0, 0, 0); DropScroll.Position = UDim2.new(0, 0, 1, 5); DropScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30); DropScroll.Visible = false; DropScroll.ZIndex = 10; Instance.new("UICorner", DropScroll)
+local ModeCont = Instance.new("Frame", FarmP); ModeCont.Size = UDim2.new(1, 0, 0, 50); ModeCont.BackgroundTransparency = 1
+local ModeLab = Instance.new("TextLabel", ModeCont); ModeLab.Size = UDim2.new(0.3, 0, 1, 0); ModeLab.Position = UDim2.new(0, 10, 0, 0); ModeLab.BackgroundTransparency = 1; ModeLab.TextColor3 = Color3.new(1, 1, 1); ModeLab.Font = "GothamSemibold"; ModeLab.TextXAlignment = "Left"
+local ModeDropBtn = Instance.new("TextButton", ModeCont); ModeDropBtn.Size = UDim2.new(0.65, 0, 0, 35); ModeDropBtn.Position = UDim2.new(0.32, 0, 0.15, 0); ModeDropBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); ModeDropBtn.TextColor3 = Color3.new(1, 1, 1); ModeDropBtn.ZIndex = 5; Instance.new("UICorner", ModeDropBtn).CornerRadius = UDim.new(0, 8)
+local ModeScroll = Instance.new("ScrollingFrame", ModeDropBtn); ModeScroll.Size = UDim2.new(1, 0, 0, 150); ModeScroll.Position = UDim2.new(0, 0, 1, 5); ModeScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30); ModeScroll.Visible = false; ModeScroll.ZIndex = 10; ModeScroll.ScrollBarThickness = 4; ModeScroll.CanvasSize = UDim2.new(0,0,0, #Modes * 35); Instance.new("UICorner", ModeScroll)
+Instance.new("UIListLayout", ModeScroll)
 
-local function createOpt(txt, y, lang)
-    local o = Instance.new("TextButton", DropScroll); o.Size = UDim2.new(1, 0, 0, 35); o.Position = UDim2.new(0, 0, 0, y); o.BackgroundColor3 = Color3.fromRGB(40, 40, 40); o.TextColor3 = Color3.new(1, 1, 1); o.Text = txt; o.ZIndex = 11
-    o.MouseButton1Click:Connect(function() CurrentLang = lang; Dropped = false; DropScroll.Visible = false; updateUI() end)
+for _, m in pairs(Modes) do
+    local o = Instance.new("TextButton", ModeScroll); o.Size = UDim2.new(1, 0, 0, 35); o.BackgroundColor3 = Color3.fromRGB(40, 40, 40); o.TextColor3 = Color3.new(1, 1, 1); o.Text = m; o.ZIndex = 11; o.Font = "GothamSemibold"
+    o.MouseButton1Click:Connect(function() SelectedMode = m; DroppedMode = false; ModeScroll.Visible = false; sendVote(m); updateUI() end)
 end
-createOpt("English", 0, "English"); createOpt("Русский", 35, "Русский")
+local AutoVoteB = createBtn(FarmP)
+
+-- ВИЗУАЛЫ И НАСТРОЙКИ
+local EspB = createBtn(VisP)
+local LangCont = Instance.new("Frame", SettP); LangCont.Size = UDim2.new(1, 0, 0, 50); LangCont.BackgroundTransparency = 1
+local LangLab = Instance.new("TextLabel", LangCont); LangLab.Size = UDim2.new(0.5, 0, 1, 0); LangLab.Position = UDim2.new(0, 10, 0, 0); LangLab.BackgroundTransparency = 1; LangLab.TextColor3 = Color3.new(1, 1, 1); LangLab.Font = "GothamSemibold"; LangLab.TextXAlignment = "Left"
+local LangDropBtn = Instance.new("TextButton", LangCont); LangDropBtn.Size = UDim2.new(0.45, 0, 0, 32); LangDropBtn.Position = UDim2.new(0.55, -5, 0, 9); LangDropBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 35); LangDropBtn.TextColor3 = Color3.new(1, 1, 1); LangDropBtn.ZIndex = 5; Instance.new("UICorner", LangDropBtn).CornerRadius = UDim.new(0, 8)
+local LangScroll = Instance.new("Frame", LangDropBtn); LangScroll.Size = UDim2.new(1, 0, 0, 70); LangScroll.Position = UDim2.new(0, 0, 1, 5); LangScroll.BackgroundColor3 = Color3.fromRGB(30, 30, 30); LangScroll.Visible = false; LangScroll.ZIndex = 10; Instance.new("UICorner", LangScroll)
+local function createLangOpt(txt, y, lang)
+    local o = Instance.new("TextButton", LangScroll); o.Size = UDim2.new(1, 0, 0, 35); o.Position = UDim2.new(0, 0, 0, y); o.BackgroundColor3 = Color3.fromRGB(40, 40, 40); o.TextColor3 = Color3.new(1, 1, 1); o.Text = txt; o.ZIndex = 11
+    o.MouseButton1Click:Connect(function() CurrentLang = lang; DroppedLang = false; LangScroll.Visible = false; updateUI() end)
+end
+createLangOpt("English", 0, "English"); createLangOpt("Русский", 35, "Русский")
+local BinB = createBtn(SettP); local AfkBBtn = createBtn(SettP)
 
 function updateUI()
     local L = Langs[CurrentLang]
     HubTitle.Text = L.Title; SideBtnFarm.Text = L.FarmT; SideBtnVis.Text = L.VisT; SideBtnSett.Text = L.SettT
     TpB.Text = L.AFarm .. ": " .. (Turn and "ON" or "OFF"); AtkB.Text = L.AAtk .. ": " .. (AttackTurn and "ON" or "OFF")
-    AutoEB.Text = L.AETxt .. ": " .. (AutoETurn and "ON" or "OFF")
-    ReadyB.Text = L.AReady .. ": " .. (AutoReadyTurn and "ON" or "OFF"); EspB.Text = L.ESP .. ": " .. (EspTurn and "ON" or "OFF")
-    BinB.Text = L.Bind .. ": [" .. OpenKey.Name .. "]"; AfkBBtn.Text = L.AFK .. ": " .. (AfkTurn and "ON" or "OFF")
-    XmasB.Text = L.AXmas .. ": " .. (AutoChristmas and "ON" or "OFF")
-    LangLab.Text = L.Lang; DropBtn.Text = CurrentLang .. " ▼"
+    AutoEB.Text = L.AETxt .. ": " .. (AutoETurn and "ON" or "OFF"); ReadyB.Text = L.AReady .. ": " .. (AutoReadyTurn and "ON" or "OFF")
+    EspB.Text = L.ESP .. ": " .. (EspTurn and "ON" or "OFF"); BinB.Text = L.Bind .. ": [" .. OpenKey.Name .. "]"
+    AfkBBtn.Text = L.AFK .. ": " .. (AfkTurn and "ON" or "OFF"); LangLab.Text = L.Lang; LangDropBtn.Text = CurrentLang .. " ▼"
+    ModeLab.Text = L.ModeTxt; ModeDropBtn.Text = SelectedMode .. " ▼"; AutoVoteB.Text = L.AVoteTxt .. ": " .. (AutoVoteEnabled and "ON" or "OFF")
     local function color(t) return t and Color3.fromRGB(0, 200, 80) or Color3.fromRGB(30, 30, 30) end
     TpB.BackgroundColor3 = color(Turn); AtkB.BackgroundColor3 = color(AttackTurn); AutoEB.BackgroundColor3 = color(AutoETurn)
-    ReadyB.BackgroundColor3 = color(AutoReadyTurn); EspB.BackgroundColor3 = color(EspTurn); AfkBBtn.BackgroundColor3 = color(AfkTurn); XmasB.BackgroundColor3 = color(AutoChristmas)
+    ReadyB.BackgroundColor3 = color(AutoReadyTurn); EspB.BackgroundColor3 = color(EspTurn); AfkBBtn.BackgroundColor3 = color(AfkTurn); AutoVoteB.BackgroundColor3 = color(AutoVoteEnabled)
 end
 
+-- ЦИКЛЫ
 task.spawn(function()
     while true do
         task.wait(0.5)
@@ -135,20 +163,10 @@ task.spawn(function()
                 task.wait(5); IsTeleporting = false
             end
         end
-    end
-end)
-
--- МОДУЛЬ АВТО-ГОЛОСОВАНИЯ (БЕЗ ИЗМЕНЕНИЙ ВИЗУАЛА)
-task.spawn(function()
-    while true do
-        task.wait(0.5)
-        if AutoChristmas then
+        if AutoVoteEnabled then
             local playMenu = CoolPlr.PlayerGui:FindFirstChild("Play")
             local mainFrame = playMenu and playMenu:FindFirstChild("Main")
-            if mainFrame and mainFrame.Visible then
-                local voteEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Vote")
-                if voteEvent then voteEvent:FireServer("Christmas"); task.wait(5) end
-            end
+            if mainFrame and mainFrame.Visible then sendVote(SelectedMode); task.wait(5) end
         end
     end
 end)
@@ -161,20 +179,17 @@ AtkB.MouseButton1Click:Connect(function() AttackTurn = not AttackTurn; updateUI(
 AutoEB.MouseButton1Click:Connect(function() AutoETurn = not AutoETurn; updateUI() end)
 ReadyB.MouseButton1Click:Connect(function() AutoReadyTurn = not AutoReadyTurn; updateUI() end)
 AfkBBtn.MouseButton1Click:Connect(function() AfkTurn = not AfkTurn; updateUI() end)
-XmasB.MouseButton1Click:Connect(function() AutoChristmas = not AutoChristmas; updateUI() end)
-DropBtn.MouseButton1Click:Connect(function() Dropped = not Dropped; DropScroll.Visible = Dropped; DropScroll.Size = Dropped and UDim2.new(1, 0, 0, 70) or UDim2.new(1, 0, 0, 0) end)
+AutoVoteB.MouseButton1Click:Connect(function() AutoVoteEnabled = not AutoVoteEnabled; updateUI() end)
+LangDropBtn.MouseButton1Click:Connect(function() DroppedLang = not DroppedLang; LangScroll.Visible = DroppedLang end)
+ModeDropBtn.MouseButton1Click:Connect(function() DroppedMode = not DroppedMode; ModeScroll.Visible = DroppedMode end)
 BinB.MouseButton1Click:Connect(function() ChangingKey = true; BinB.Text = "..." end)
 
 local function toggleMain()
     if not Main.Visible then Main.Visible = true; TS:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Back), {Position = UDim2.new(0.5, -250, 0.5, -175)}):Play()
     else TS:Create(Main, TweenInfo.new(0.3), {Position = UDim2.new(0.5, -250, 1.2, 0)}):Play(); task.wait(0.3); Main.Visible = false end
 end
-
 OpenBtn.MouseButton1Click:Connect(toggleMain)
-UIS.InputBegan:Connect(function(i, p) 
-    if ChangingKey and i.UserInputType == Enum.UserInputType.Keyboard then OpenKey = i.KeyCode; ChangingKey = false; updateUI()
-    elseif not p and i.KeyCode == OpenKey then toggleMain() end 
-end)
+UIS.InputBegan:Connect(function(i, p) if ChangingKey and i.UserInputType == Enum.UserInputType.Keyboard then OpenKey = i.KeyCode; ChangingKey = false; updateUI() elseif not p and i.KeyCode == OpenKey then toggleMain() end end)
 
 RunService.Heartbeat:Connect(function()
     if Turn and CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart") and CoolPlr.Character.Humanoid.Health > 0 then
@@ -185,13 +200,7 @@ RunService.Heartbeat:Connect(function()
             if tick() - EnemyDetectedTime >= FarmDelay then CoolPlr.Character.HumanoidRootPart.CFrame = t.HumanoidRootPart.CFrame * CFrame.new(0, 0, 4) end
         else WaitingForFarm = false end
     else WaitingForFarm = false end
-    
-    if AutoETurn and (tick() - lastESpam >= 1) then
-        lastESpam = tick(); VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05); VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-    end
-    
-    if AttackTurn and not AttackDebounce then
-        AttackDebounce = true; VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0); task.wait(0.05); VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0); task.delay(0.5, function() AttackDebounce = false end)
-    end
+    if AutoETurn and (tick() - lastESpam >= 1) then lastESpam = tick(); VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05); VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game) end
+    if AttackTurn and not AttackDebounce then AttackDebounce = true; VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0); task.wait(0.05); VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0); task.delay(0.5, function() AttackDebounce = false end) end
 end)
 updateUI()
