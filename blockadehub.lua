@@ -12,8 +12,9 @@ local CurrentLang = "Русский"
 local LobbySpawnPos = nil
 local IsTeleporting = false
 local lastESpam = 0
+local lastReadyTP = 0 -- Для КД 2 секунды
 
--- КД ДЛЯ ФАРМА (5 СЕКУНД)
+-- КД ДЛЯ ФАРМА (ТВОЙ ОРИГИНАЛ)
 local FarmDelay = 5 
 local EnemyDetectedTime = 0
 local WaitingForFarm = false
@@ -42,14 +43,22 @@ local function makeDraggable(frame)
     end)
 end
 
-local function findZone()
+-- ПОИСК ЗОНЫ В РАДИУСЕ 20 МЕТРОВ
+local function findReadyZone()
+    local hrp = CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
     for _, v in pairs(workspace:GetDescendants()) do
-        if v:IsA("BasePart") and (v.Name:lower():find("ready") or v.Name:lower():find("zone")) then return v end
+        if v:IsA("BasePart") and (v.Name:lower():find("ready") or v.Name:lower():find("zone")) then
+            if (v.Position - hrp.Position).Magnitude <= 20 then -- ОГРАНИЧЕНИЕ 20 МЕТРОВ
+                return v
+            end
+        end
     end
     return nil
 end
 
--- 🛡️ НОВЫЙ АНТИ-АФК (ДЛЯ МОБИЛОК И ПК)
+-- АНТИ-АФК
 for _, v in pairs(getconnections(CoolPlr.Idled)) do v:Disable() end
 CoolPlr.Idled:Connect(function()
     if AfkTurn then
@@ -64,7 +73,6 @@ CoolPlr.Idled:Connect(function()
 end)
 
 local Gui = Instance.new("ScreenGui", CoolPlr.PlayerGui); Gui.Name = "BlockadeHub_Final"; Gui.ResetOnSpawn = false
-
 local OpenBtn = Instance.new("TextButton", Gui)
 OpenBtn.Size = UDim2.new(0, 50, 0, 50); OpenBtn.Position = UDim2.new(0.5, -25, 0.5, -25)
 OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30); OpenBtn.Text = "BH"; OpenBtn.TextColor3 = Color3.new(1, 1, 1); OpenBtn.Font = "GothamBold"; OpenBtn.TextSize = 18
@@ -79,7 +87,7 @@ local SideList = Instance.new("UIListLayout", Side); SideList.Padding = UDim.new
 local HubTitle = Instance.new("TextLabel", Side); HubTitle.Size = UDim2.new(1, 0, 0, 50); HubTitle.BackgroundTransparency = 1; HubTitle.TextColor3 = Color3.new(1, 1, 1); HubTitle.Font = "GothamBold"; HubTitle.TextSize = 16
 
 local SideBtnFarm = Instance.new("TextButton", Side); local SideBtnVis = Instance.new("TextButton", Side); local SideBtnSett = Instance.new("TextButton", Side)
-local function styleSide(btn) btn.Size = UDim2.new(0.9, 0, 0, 38); btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25); btn.TextColor3 = Color3.fromRGB(200, 200, 200); btn.Font = "GothamSemibold"; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12) end
+styleSide = function(btn) btn.Size = UDim2.new(0.9, 0, 0, 38); btn.BackgroundColor3 = Color3.fromRGB(25, 25, 25); btn.TextColor3 = Color3.fromRGB(200, 200, 200); btn.Font = "GothamSemibold"; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 12) end
 styleSide(SideBtnFarm); styleSide(SideBtnVis); styleSide(SideBtnSett)
 
 local Pages = Instance.new("Frame", Main); Pages.Position = UDim2.new(0, 160, 0, 15); Pages.Size = UDim2.new(1, -175, 1, -30); Pages.BackgroundTransparency = 1
@@ -121,24 +129,24 @@ function updateUI()
     ReadyB.BackgroundColor3 = color(AutoReadyTurn); EspB.BackgroundColor3 = color(EspTurn); AfkBBtn.BackgroundColor3 = color(AfkTurn); XmasB.BackgroundColor3 = color(AutoChristmas)
 end
 
+-- НОВАЯ ЛОГИКА ГОТОВНОСТИ (20 МЕТРОВ + 2 СЕК КД)
 task.spawn(function()
     while true do
-        task.wait(0.5)
-        local char = CoolPlr.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if AutoReadyTurn and hrp then
-            if not LobbySpawnPos then LobbySpawnPos = hrp.Position end
-            if (hrp.Position - LobbySpawnPos).Magnitude <= 20 and not IsTeleporting then
-                IsTeleporting = true; task.wait(2.5)
-                local zone = findZone()
-                if zone then hrp.CFrame = zone.CFrame + Vector3.new(0, 3, 0) else hrp.CFrame = hrp.CFrame * CFrame.new(0, 0, -18) end
-                task.wait(5); IsTeleporting = false
+        task.wait(0.1)
+        if AutoReadyTurn then
+            local zone = findReadyZone()
+            if zone and (tick() - lastReadyTP >= 2) then -- ТП ТОЛЬКО ЕСЛИ ЕСТЬ ЗОНА И ПРОШЛО 2 СЕК
+                local hrp = CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    lastReadyTP = tick()
+                    hrp.CFrame = zone.CFrame + Vector3.new(0, 3, 0)
+                end
             end
         end
     end
 end)
 
--- МОДУЛЬ АВТО-ГОЛОСОВАНИЯ (БЕЗ ИЗМЕНЕНИЙ ВИЗУАЛА)
+-- АВТО-ГОЛОСОВАНИЕ
 task.spawn(function()
     while true do
         task.wait(0.5)
@@ -191,6 +199,7 @@ RunService.Heartbeat:Connect(function()
     end
     
     if AttackTurn and not AttackDebounce then
+        local AttackDebounce = false
         AttackDebounce = true; VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0); task.wait(0.05); VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0); task.delay(0.5, function() AttackDebounce = false end)
     end
 end)
