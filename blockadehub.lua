@@ -115,7 +115,7 @@ end
 -- 🔥 ТВОЙ ОРИГИНАЛЬНЫЙ СКРИПТ ТП
 task.spawn(function()
     while true do
-        task.wait(5)
+        task.wait(10)
         if AutoReadyTurn then
             local char = CoolPlr.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
