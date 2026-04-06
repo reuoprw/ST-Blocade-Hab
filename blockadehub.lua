@@ -5,20 +5,29 @@ local VIM = game:GetService("VirtualInputManager")
 local VU = game:GetService("VirtualUser")
 local CoolPlr = game.Players.LocalPlayer
 
-local Turn, AttackTurn, EspTurn, AfkTurn, AutoReadyTurn, AutoETurn, AutoChristmas = false, false, false, false, false, false, false
+local Turn, AttackTurn, EspTurn, AfkTurn, AutoReadyTurn, AutoETurn, AutoChristmas, AutoAstro = false, false, false, false, false, false, false, false
 local OpenKey = Enum.KeyCode.LeftAlt
 local ChangingKey, Dropped = false, false
 local CurrentLang = "Русский"
 local lastESpam = 0
 
--- КД ДЛЯ ФАРМА (5 СЕКУНД)
+-- Список предметов из скриншотов
+local AstroItems = {
+    "Trooper Blaster", "Trooper Spinner", "Specialist Blaster", "Specialist Spinner", 
+    "Specailist Sword Arm", "Strider Leg", "Interceptor Wing", "Interceptor Goggles", 
+    "Interceptor Spinner", "Impactor Cannon", "Impactor Laser", "High Impactor Cannon", 
+    "High Impactor Laser", "Destructor Laser", "Destructor Blaster", "Destructor Core", 
+    "Obliterator Blaster", "Obliterator Spinner", "Specialist Cannon"
+}
+
+-- КД ДЛЯ ФАРМА
 local FarmDelay = 5 
 local EnemyDetectedTime = 0
 local WaitingForFarm = false
 
 local Langs = {
-    ["Русский"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Фарм", VisT = "👁️ Визуалы", SettT = "⚙️ Настройки", AFarm = "АВТО ФАРМ", AAtk = "АВТО АТАКА", ESP = "ВКЛЮЧИТЬ ESP", Bind = "КЛАВИША", Lang = "ЯЗЫК", AFK = "АНТИ-АФК", AReady = "АВТО ГОТОВНОСТЬ", AETxt = "АВТО [E]", AXmas = "АВТО РОЖДЕСТВО" },
-    ["English"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Farm", VisT = "👁️ Visuals", SettT = "⚙️ Settings", AFarm = "AUTO FARM", AAtk = "AUTO ATTACK", ESP = "ENABLE ESP", Bind = "KEYBIND", Lang = "LANGUAGE", AFK = "ANTI-AFK", AReady = "AUTO READY", AETxt = "AUTO [E]", AXmas = "AUTO XMAS" }
+    ["Русский"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Фарм", VisT = "👁️ Визуалы", SettT = "⚙️ Настройки", AFarm = "АВТО ФАРМ", AAtk = "АВТО АТАКА", ESP = "ВКЛЮЧИТЬ ESP", Bind = "КЛАВИША", Lang = "ЯЗЫК", AFK = "АНТИ-АФК", AReady = "АВТО ГОТОВНОСТЬ", AETxt = "АВТО [E]", AXmas = "АВТО РОЖДЕСТВО", AAstro = "ТП К ПРЕДМЕТАМ" },
+    ["English"] = { Title = "BLOCKADE HUB", FarmT = "⚔️ Farm", VisT = "👁️ Visuals", SettT = "⚙️ Settings", AFarm = "AUTO FARM", AAtk = "AUTO ATTACK", ESP = "ENABLE ESP", Bind = "KEYBIND", Lang = "LANGUAGE", AFK = "ANTI-AFK", AReady = "AUTO READY", AETxt = "AUTO [E]", AXmas = "AUTO XMAS", AAstro = "TP TO ITEMS" }
 }
 
 local function makeDraggable(frame)
@@ -40,22 +49,84 @@ local function makeDraggable(frame)
     end)
 end
 
--- 🛡️ АНТИ-АФК
+-- 🛡️ АНТИ-АФК (Новый)
 for _, v in pairs(getconnections(CoolPlr.Idled)) do v:Disable() end
-CoolPlr.Idled:Connect(function()
-    if AfkTurn then
-        pcall(function()
-            local cam = workspace.CurrentCamera
-            local oldCF = cam.CFrame
-            cam.CFrame = oldCF * CFrame.Angles(0, math.rad(0.1), 0)
-            task.wait(0.1)
-            cam.CFrame = oldCF
-        end)
+task.spawn(function()
+    while task.wait(25) do
+        if AfkTurn then
+            pcall(function()
+                local hrp = CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart")
+                local cam = workspace.CurrentCamera
+                VU:CaptureController()
+                VU:MouseMoveEvent(Vector2.new(200, 200), cam.CFrame)
+                if hrp then
+                    local oldCF = hrp.CFrame
+                    hrp.CFrame = oldCF * CFrame.new(0.1, 0, 0.1)
+                    task.wait(0.1)
+                    hrp.CFrame = oldCF
+                end
+                VU:Button1Down(Vector2.new(0,0), cam.CFrame); task.wait(0.1); VU:Button1Up(Vector2.new(0,0), cam.CFrame)
+            end)
+        end
+    end
+end)
+
+-- 🚀 ЧИСТЫЙ ТП К ПРЕДМЕТАМ
+task.spawn(function()
+    while task.wait(1) do
+        if AutoAstro then
+            pcall(function()
+                local hrp = CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart")
+                if not hrp then return end
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v:IsA("BasePart") or v:IsA("Model") then
+                        local found = false
+                        for _, name in pairs(AstroItems) do
+                            if v.Name:lower():find(name:lower()) then
+                                found = true; break
+                            end
+                        end
+                        if found then
+                            local targetPos = v:IsA("Model") and v:GetPivot() or v.CFrame
+                            hrp.CFrame = targetPos
+                            task.wait(0.5) -- Время постоять в предмете
+                            break 
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- 👁️ ESP
+local function applyESP(model)
+    if not model:FindFirstChild("EspHighlight") then
+        local hl = Instance.new("Highlight")
+        hl.Name = "EspHighlight"; hl.Parent = model
+        hl.FillColor = Color3.fromRGB(255, 0, 0); hl.OutlineColor = Color3.new(1, 1, 1)
+        hl.FillTransparency = 0.5; hl.OutlineTransparency = 0; hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    end
+end
+
+task.spawn(function()
+    while task.wait(1) do
+        if EspTurn then
+            for _, obj in pairs(workspace:GetDescendants()) do
+                if obj:IsA("Model") and obj.Name:lower():find("skibidi") then
+                    applyESP(obj)
+                end
+            end
+        else
+            for _, obj in pairs(workspace:GetDescendants()) do
+                local hl = obj:FindFirstChild("EspHighlight")
+                if hl then hl:Destroy() end
+            end
+        end
     end
 end)
 
 local Gui = Instance.new("ScreenGui", CoolPlr.PlayerGui); Gui.Name = "BlockadeHub_Final"; Gui.ResetOnSpawn = false
-
 local OpenBtn = Instance.new("TextButton", Gui)
 OpenBtn.Size = UDim2.new(0, 50, 0, 50); OpenBtn.Position = UDim2.new(0.5, -25, 0.5, -25)
 OpenBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30); OpenBtn.Text = "BH"; OpenBtn.TextColor3 = Color3.new(1, 1, 1); OpenBtn.Font = "GothamBold"; OpenBtn.TextSize = 18
@@ -84,7 +155,7 @@ local function createBtn(p)
     return b
 end
 
-local TpB = createBtn(FarmP); local AtkB = createBtn(FarmP); local AutoEB = createBtn(FarmP); local ReadyB = createBtn(FarmP); local XmasB = createBtn(FarmP)
+local TpB = createBtn(FarmP); local AtkB = createBtn(FarmP); local AutoEB = createBtn(FarmP); local ReadyB = createBtn(FarmP); local XmasB = createBtn(FarmP); local AstroB = createBtn(FarmP)
 local EspB = createBtn(VisP); local BinB = createBtn(SettP); local AfkBBtn = createBtn(SettP)
 
 local LangCont = Instance.new("Frame", SettP); LangCont.Size = UDim2.new(1, 0, 0, 50); LangCont.BackgroundTransparency = 1
@@ -105,53 +176,42 @@ function updateUI()
     AutoEB.Text = L.AETxt .. ": " .. (AutoETurn and "ON" or "OFF")
     ReadyB.Text = L.AReady .. ": " .. (AutoReadyTurn and "ON" or "OFF"); EspB.Text = L.ESP .. ": " .. (EspTurn and "ON" or "OFF")
     BinB.Text = L.Bind .. ": [" .. OpenKey.Name .. "]"; AfkBBtn.Text = L.AFK .. ": " .. (AfkTurn and "ON" or "OFF")
-    XmasB.Text = L.AXmas .. ": " .. (AutoChristmas and "ON" or "OFF")
+    XmasB.Text = L.AXmas .. ": " .. (AutoChristmas and "ON" or "OFF"); AstroB.Text = L.AAstro .. ": " .. (AutoAstro and "ON" or "OFF")
     LangLab.Text = L.Lang; DropBtn.Text = CurrentLang .. " ▼"
     local function color(t) return t and Color3.fromRGB(0, 200, 80) or Color3.fromRGB(30, 30, 30) end
     TpB.BackgroundColor3 = color(Turn); AtkB.BackgroundColor3 = color(AttackTurn); AutoEB.BackgroundColor3 = color(AutoETurn)
-    ReadyB.BackgroundColor3 = color(AutoReadyTurn); EspB.BackgroundColor3 = color(EspTurn); AfkBBtn.BackgroundColor3 = color(AfkTurn); XmasB.BackgroundColor3 = color(AutoChristmas)
+    ReadyB.BackgroundColor3 = color(AutoReadyTurn); EspB.BackgroundColor3 = color(EspTurn); AfkBBtn.BackgroundColor3 = color(AfkTurn); XmasB.BackgroundColor3 = color(AutoChristmas); AstroB.BackgroundColor3 = color(AutoAstro)
 end
 
--- 🔥 ТВОЙ ОРИГИНАЛЬНЫЙ СКРИПТ ТП
 task.spawn(function()
     while true do
         task.wait(10)
         if AutoReadyTurn then
-            local char = CoolPlr.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            local hrp = CoolPlr.Character and CoolPlr.Character:FindFirstChild("HumanoidRootPart")
             if hrp then
                 local targetZone = nil
                 for _, v in pairs(workspace:GetDescendants()) do
                     if v:IsA("BasePart") and (v.Name:lower():find("ready") or v.Name:lower():find("zone")) then
-                        local distance = (v.Position - hrp.Position).Magnitude
-                        if distance <= 100 then 
-                            targetZone = v
-                            break 
-                        end
+                        if (v.Position - hrp.Position).Magnitude <= 100 then targetZone = v; break end
                     end
                 end
                 if targetZone then
-                    local angle = math.random() * math.pi * 2
-                    local offsetDist = math.random() * 3
-                    local offsetX = math.cos(angle) * offsetDist
-                    local offsetZ = math.sin(angle) * offsetDist
-                    hrp.CFrame = CFrame.new(targetZone.Position + Vector3.new(offsetX, 3, offsetZ))
+                    local angle = math.random() * math.pi * 2; local offset = math.random() * 3
+                    hrp.CFrame = CFrame.new(targetZone.Position + Vector3.new(math.cos(angle)*offset, 3, math.sin(angle)*offset))
                 end
             end
         end
     end
 end)
 
--- АВТО-ГОЛОСОВАНИЕ
 task.spawn(function()
     while true do
         task.wait(0.5)
         if AutoChristmas then
-            local playMenu = CoolPlr.PlayerGui:FindFirstChild("Play")
-            local mainFrame = playMenu and playMenu:FindFirstChild("Main")
-            if mainFrame and mainFrame.Visible then
-                local voteEvent = game:GetService("ReplicatedStorage"):FindFirstChild("Vote")
-                if voteEvent then voteEvent:FireServer("Christmas"); task.wait(5) end
+            local play = CoolPlr.PlayerGui:FindFirstChild("Play")
+            if play and play.Main.Visible then
+                local event = game:GetService("ReplicatedStorage"):FindFirstChild("Vote")
+                if event then event:FireServer("Christmas"); task.wait(5) end
             end
         end
     end
@@ -166,6 +226,8 @@ AutoEB.MouseButton1Click:Connect(function() AutoETurn = not AutoETurn; updateUI(
 ReadyB.MouseButton1Click:Connect(function() AutoReadyTurn = not AutoReadyTurn; updateUI() end)
 AfkBBtn.MouseButton1Click:Connect(function() AfkTurn = not AfkTurn; updateUI() end)
 XmasB.MouseButton1Click:Connect(function() AutoChristmas = not AutoChristmas; updateUI() end)
+AstroB.MouseButton1Click:Connect(function() AutoAstro = not AutoAstro; updateUI() end)
+EspB.MouseButton1Click:Connect(function() EspTurn = not EspTurn; updateUI() end)
 DropBtn.MouseButton1Click:Connect(function() Dropped = not Dropped; DropScroll.Visible = Dropped; DropScroll.Size = Dropped and UDim2.new(1, 0, 0, 70) or UDim2.new(1, 0, 0, 0) end)
 BinB.MouseButton1Click:Connect(function() ChangingKey = true; BinB.Text = "..." end)
 
@@ -189,11 +251,9 @@ RunService.Heartbeat:Connect(function()
             if tick() - EnemyDetectedTime >= FarmDelay then CoolPlr.Character.HumanoidRootPart.CFrame = t.HumanoidRootPart.CFrame * CFrame.new(0, 0, 4) end
         else WaitingForFarm = false end
     else WaitingForFarm = false end
-    
     if AutoETurn and (tick() - lastESpam >= 1) then
         lastESpam = tick(); VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game); task.wait(0.05); VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     end
-    
     if AttackTurn and not AttackDebounce then
         AttackDebounce = true; VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0); task.wait(0.05); VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0); task.delay(0.5, function() AttackDebounce = false end)
     end
